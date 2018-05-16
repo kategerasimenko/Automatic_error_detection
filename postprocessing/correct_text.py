@@ -6,7 +6,7 @@ from nltk.tokenize.punkt import PunktSentenceTokenizer
 from nltk.data import load
 from nltk import StanfordPOSTagger
 from intervaltree import Interval, IntervalTree
-from spellchecker import spellchecker, dummy_spellchecker
+from spellchecker import spellchecker, dummy_spellchecker, very_dummy_spellchecker
 from idx_linked_list import IdxList
 from gensim.models import KeyedVectors
 from articles import ArticleCorrector
@@ -22,10 +22,10 @@ class AnnotationCompiler:
         self.st = StanfordPOSTagger('../stanfordPOStagger/english-bidirectional-distsim.tagger',
                                     '../stanfordPOStagger/stanford-postagger.jar',
                                     java_options='-mx2048m')
-        #self.w2v_model = KeyedVectors.load_word2vec_format(
-        #    "C:/Users/PC1/Desktop/python/деплом/deplom/constructions/GoogleNews-vectors-negative300.bin.gz",
-        #    binary=True)
-        self.w2v_model = None
+        self.w2v_model = KeyedVectors.load_word2vec_format(
+            "C:/Users/PC1/Desktop/python/деплом/deplom/constructions/GoogleNews-vectors-negative300.bin.gz",
+            binary=True)
+        #self.w2v_model = None
         self.text = self.get_text()
         self.anns = []
         self.idx_tree = IdxList()
@@ -67,7 +67,7 @@ class AnnotationCompiler:
                 anns.append(('%s %d %d\t%s' % (tag,start_idx,end_idx,corr[0]),
                              'AnnotatorNotes <ERROR>\t%s' % (corr[1])))
                 final_corrs.append((start_idx,corr[0],corr[1]))
-        text = self.correct_text(final_corrs,abs_idx=True)  # SHOULD BE SELF.TEXT WHEN IDXS ARE TACKLED
+        self.text = self.correct_text(final_corrs,abs_idx=True)  # SHOULD BE SELF.TEXT WHEN IDXS ARE TACKLED
         return anns
 
 
@@ -94,7 +94,10 @@ class AnnotationCompiler:
 
     def compile_annotation(self):
         # collect all corrections
-        spelling = dummy_spellchecker()
+        sents,tokens,idxs,sent_spans = self.tokenize()
+        with open('initial_sents.txt','w',encoding='utf-8') as f:
+            f.write('\n'.join(sents))
+        spelling = very_dummy_spellchecker()
         print('Spelling')
         spell_anns = self.ann_from_spelling(spelling)
         self.anns.extend(spell_anns)
@@ -121,6 +124,7 @@ class AnnotationCompiler:
                         '#%d\t'%(i+1)+ann[1].replace('<ERROR>','T%d'%(i+1))+'\n')
         
 # exam 2014 EEm_33_2
+# exam 2017 EGe_100_2
 a = AnnotationCompiler('test_text.txt')
 a.compile_annotation()
         

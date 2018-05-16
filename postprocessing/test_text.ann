@@ -1,58 +1,28 @@
-T1	Spelling 424 432	phisycal
-#1	AnnotatorNotes T1	physical
-T2	Spelling 484 494	prepearing
-#2	AnnotatorNotes T2	preparing
-T3	Spelling 540 548	phisycal
-#3	AnnotatorNotes T3	physical
-T4	Spelling 741 749	knowldge
-#4	AnnotatorNotes T4	knowledge
-T5	Spelling 759 765	trully
-#5	AnnotatorNotes T5	truly
-T6	Spelling 866 875	rescreate
-#6	AnnotatorNotes T6	res create
-T7	Spelling 963 971	physycal
-#7	AnnotatorNotes T7	physical
-T8	Spelling 1117 1125	needness
-#8	AnnotatorNotes T8	neediness
-T9	Spelling 1215 1222	repeate
-#9	AnnotatorNotes T9	repeater
-T10	Spelling 1233 1244	educauional
-#10	AnnotatorNotes T10	educational
-T11	Spelling 1263 1272	changings
-#11	AnnotatorNotes T11	changing
-T12	Spelling 1431 1440	democraty
-#12	AnnotatorNotes T12	Democrat
-T13	Articles 45 56	same number
-#13	AnnotatorNotes T13	the same number
-T14	Articles 201 213	the one hand
-#14	AnnotatorNotes T14	one hand
-T15	Articles 220 230	great idea
-#15	AnnotatorNotes T15	a great idea
-T16	Articles 334 354	different proportion
-#16	AnnotatorNotes T16	a different proportion
-T17	Articles 540 560	phisycal differences
-#17	AnnotatorNotes T17	the phisycal differences
-T18	Articles 655 672	the majority part
-#18	AnnotatorNotes T18	majority part
-T19	Articles 676 691	female students
-#19	AnnotatorNotes T19	the female students
-T20	Articles 848 860	universities
-#20	AnnotatorNotes T20	the universities
-T21	Articles 928 935	problem
-#21	AnnotatorNotes T21	a problem
-T22	Articles 963 987	physycal classes vacancy
-#22	AnnotatorNotes T22	the physycal classes vacancy
-T23	Articles 1162 1171	vacancies
-#23	AnnotatorNotes T23	the vacancies
-T24	Articles 1233 1251	educauional system
-#24	AnnotatorNotes T24	an educauional system
-T25	Articles 1350 1365	similar numbers
-#25	AnnotatorNotes T25	the similar numbers
-T26	Articles 1400 1411	good change
-#26	AnnotatorNotes T26	a good change
-T27	Articles 1423 1427	base
-#27	AnnotatorNotes T27	the base
-T28	Articles 1456 1465	best area
-#28	AnnotatorNotes T28	the best area
-T29	Articles 1526 1539	other variant
-#29	AnnotatorNotes T29	the other variant
+T1	Spelling 200 210	othertwise
+#1	AnnotatorNotes T1	otherwise
+T2	Spelling 368 372	ther
+#2	AnnotatorNotes T2	the
+T3	Spelling 738 747	dificcult
+#3	AnnotatorNotes T3	difficult
+T4	Spelling 1021 1030	goverment
+#4	AnnotatorNotes T4	government
+T5	Spelling 1246 1256	apperently
+#5	AnnotatorNotes T5	apparently
+T6	Spelling 1515 1523	commited
+#6	AnnotatorNotes T6	committed
+T7	Articles 0 15	A vast majority
+#7	AnnotatorNotes T7	The vast majority
+T8	Articles 289 309	the significant role
+#8	AnnotatorNotes T8	a significant role
+T9	Articles 367 379	the children
+#9	AnnotatorNotes T9	children
+T10	Articles 597 606	the shops
+#10	AnnotatorNotes T10	shops
+T11	Articles 1044 1054	the course
+#11	AnnotatorNotes T11	course
+T12	Articles 1207 1215	long way
+#12	AnnotatorNotes T12	a long way
+T13	Articles 1543 1554	the problem
+#13	AnnotatorNotes T13	a problem
+T14	Articles 1598 1605	efforts
+#14	AnnotatorNotes T14	the efforts

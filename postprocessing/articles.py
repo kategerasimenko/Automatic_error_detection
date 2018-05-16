@@ -4,6 +4,7 @@ import numpy as np
 from scipy.sparse import hstack, csr_matrix, lil_matrix
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.linear_model import LogisticRegression
+from xgboost import XGBClassifier
 from nltk.tokenize import TreebankWordTokenizer
 from nltk import RegexpParser
 from collections import defaultdict
@@ -22,6 +23,7 @@ class ArticleCorrector:
         grammar = r'NP: {<DT|JJ.?|PRP\$|POS|RB.|CD|NN.*>*<NN.*>}'
         self.chunker = RegexpParser(grammar)
         self.tokenizer = TreebankWordTokenizer()
+        self.options = ['a','an','the','zero']
 
         self.cuvplus = defaultdict(list)
         with open('../cuvplus.txt','r',encoding='utf-8-sig') as f:
@@ -43,7 +45,7 @@ class ArticleCorrector:
         with open('../models/article_logit_type.pickle','rb') as f:
            self.logit_type = pickle.load(f)
 
-        with open('../models/article_metaclassifier_forest.pickle','rb') as f:
+        with open('../models/article_metaclassifier_xgboost.pickle','rb') as f:
             self.metaforest = pickle.load(f)
 
         self.subst = re.compile('^[aA][nN]? |^[tT][hH][eE] ')
@@ -83,9 +85,9 @@ class ArticleCorrector:
            count_vect = pickle.load(f)
 
         all_vectors = lil_matrix((self.feats.shape[0],300))
-        #for i,word in enumerate(self.feats['Head']):
-        #    if word in w2v_model:
-        #        all_vectors[i,:] = w2v_model[word]
+        for i,word in enumerate(self.feats['Head']):
+            if word in w2v_model:
+               all_vectors[i,:] = w2v_model[word]
 
         npm = np_vect.transform(self.feats['NP'])
         pos = pos_vect.transform(self.feats['POS_tags'])
@@ -134,22 +136,24 @@ class ArticleCorrector:
         return init_prob,corr_prob
 
 
+
     def get_sentences_for_lm(self):
         sents = []
         for i,np,sent,start_idx,sent_idx,article,pred in \
             self.feats[['raw_NP','Sentence','Start_idx','Sent_start_idx','Article','Predicted']].itertuples():
-            if article == pred:
-                sents.extend((' '.join(self.idx_to_sent[sent_idx]),''))
-            else:
-                new_pred = self.form_one_correction(np,pred)
+            curr_sents = []
+            for option in self.options:
+                new_pred = self.form_one_correction(np,option)
                 new_sent = sent[:start_idx]+new_pred+sent[start_idx+len(np):]
-                sents.extend((' '.join(self.idx_to_sent[sent_idx]),' '.join(self.tokenizer.tokenize(new_sent))))
-        return '\n'.join(sents)+'\n'
+                curr_sents.append(' '.join(self.tokenizer.tokenize(new_sent)))
+            sents.append(curr_sents)
+        return sents
             
 
     def write_sentences_for_lm(self,sents):
         with open('test_sents.txt','w',encoding='utf-8') as f:
-            f.write(sents)
+            f.write('\n\n'.join(['\n'.join(x) for x in sents]))
+            f.write('\n')
 
 
     def get_metamatrix(self):
@@ -161,23 +165,62 @@ class ArticleCorrector:
         with open('lm_preds_test.json','r',encoding='utf-8') as f:
             probs = json.loads(f.read())
         # end temp
-        self.metafeats = pd.concat([pd.DataFrame(preds),pd.DataFrame(preds_type)],axis=1)
-        self.metafeats['init_prob'],self.metafeats['corr_prob'] = self.process_probs(probs)
-        self.metafeats['probs_ratio'] = self.metafeats['init_prob'] / self.metafeats['corr_prob']
-        self.metafeats['probs_delta'] = self.metafeats['init_prob'] - self.metafeats['corr_prob']
-        for sent,np,iprob,cprob in zip(self.feats['Sentence'],self.feats['raw_NP'],
-                                       self.metafeats['init_prob'],self.metafeats['corr_prob']):
-            print(sent,np,iprob,cprob)
+        self.metafeats = pd.concat([pd.DataFrame(preds,columns=['present','zero']),
+                                    pd.DataFrame(preds_type,columns=['a','an','the']),
+                                    pd.DataFrame(probs,columns=['lm_a','lm_an','lm_the','lm_zero'])],
+                                   axis=1)
+        probs_ratio = []
+        probs_delta = []
+        init_probs = []
+        corr_probs = []
+        lm_choice = []
+        for i in range(self.metafeats.shape[0]):
+            row = self.metafeats.iloc[i]
+            feat_row = self.feats.iloc[i]
+            init_prob = row['lm_'+feat_row['Article']]
+            corr_prob = row['lm_'+feat_row['Predicted']]
+            init_probs.append(init_prob)
+            corr_probs.append(corr_prob)
+            probs_ratio.append(init_prob / corr_prob)
+            probs_delta.append(init_prob - corr_prob)
+            lm_choice.append(np.argmax(row[['lm_a','lm_an','lm_the','lm_zero']]).split('_')[1])
+        self.metafeats['init_prob'] = init_probs
+        self.metafeats['corr_prob'] = corr_probs
+        self.metafeats['probs_ratio'] = probs_ratio
+        self.metafeats['probs_delta'] = probs_delta
+        self.feats['LM'] = lm_choice
+        #for sent,np,iprob,cprob in zip(self.feats['Sentence'],self.feats['raw_NP'],
+        #                               self.metafeats['init_prob'],self.metafeats['corr_prob']):
+        #    print(sent,np,iprob,cprob)
+
+        self.metafeats = self.metafeats.loc[(self.feats['Article'] != self.feats['Predicted']) |
+                                            (self.feats['Article'] != self.feats['LM']),:]
 
         with open('../models/article_choice_vectorizer.pickle','rb') as f:
             art_vect = pickle.load(f)
-        self.metafeats = hstack((self.metafeats.to_sparse(),art_vect.transform(self.feats['Article']),
-                                 art_vect.transform(self.feats['Predicted'])))
-        print(self.metafeats.shape)
+        self.metafeats_sparse = hstack((self.metafeats.drop(['lm_a','lm_an','lm_the','lm_zero'],axis=1).to_sparse(),
+                                 art_vect.transform(self.feats.loc[self.metafeats.index,'Article']),
+                                 art_vect.transform(self.feats.loc[self.metafeats.index,'LM']),
+                                 art_vect.transform(self.feats.loc[self.metafeats.index,'Predicted'])))
+        print(self.metafeats_sparse.shape)
 
 
     def get_preds(self):
-        preds = self.metaforest.predict(self.metafeats)
+        preds = self.metaforest.predict_proba(self.metafeats_sparse)
+        abs_preds = self.metaforest.predict(self.metafeats_sparse)
+        final_preds = []
+        #print(self.metafeats[['a','an','the','zero']])
+        for l1_prob,lm_prob,meta_prob in zip(self.metafeats[['a','an','the','zero','present']].values,
+                                             self.metafeats[['lm_a','lm_an','lm_the','lm_zero']].values,
+                                             preds):
+            #print(l1_prob,meta_prob,np.mean((l1_prob,meta_prob),axis=0))
+            l1_prob[:3] *= l1_prob[-1]
+            final_preds.append(self.options[np.argmax(np.average((l1_prob[:-1],meta_prob,lm_prob),
+                                                       axis=0))])
+        self.feats['Final_predicted'] = self.feats['Predicted']
+        self.feats.loc[self.metafeats.index,'Final_predicted'] = final_preds
+        self.feats.to_csv('test_feats.csv',sep=';',encoding='utf-8-sig')
+        
         return preds
         
     def form_one_correction(self,initial,predicted):
@@ -185,12 +228,19 @@ class ArticleCorrector:
         if any([initial.lower().startswith(x) for x in ['a ','an ','the ']]):
             predicted = self.subst.sub(repl,initial)
         else:
-            predicted = repl + initial
+            if repl and initial[0] == initial[0].upper():
+                predicted = repl + initial[0].lower() + initial[1:]
+            else:
+                predicted = repl + initial
+        if initial == initial.upper():
+            predicted = predicted.upper()
+        elif initial[0] == initial[0].upper():
+            predicted = predicted[0].upper() + predicted[1:]
         return predicted
 
     def form_corrections(self,preds):
-        to_correct = self.feats.loc[self.feats['Predicted'] != self.feats['Article'],:]
-        to_correct = to_correct[['Start_idx','Sent_start_idx','raw_NP','Predicted']].values.tolist()
+        to_correct = self.feats.loc[self.feats['Final_predicted'] != self.feats['Article'],:]
+        to_correct = to_correct[['Start_idx','Sent_start_idx','raw_NP','Final_predicted']].values.tolist()
         #print(to_correct)
         for i in range(len(to_correct)):
             to_correct[i][3] = self.form_one_correction(to_correct[i][2],to_correct[i][3])
@@ -219,5 +269,4 @@ class ArticleCorrector:
 
 # сгенерить табличку на основе текста (включая tag_sents и чанкинг)
 # предсказать по табличке
-# тут должна быть вся артиклевая система, но пока только L1
 # выдача - стартовый индекс в старом тексте, старая NP, новая NP

@@ -32,6 +32,15 @@
 *
 *
 *
+*
+& othertwise 6 200: otherwise, Ottawas, outhits, Ottawa's, outwears, outerwear's
+*
+*
+*
+*
+*
+*
+*
 
 *
 *
@@ -52,6 +61,7 @@
 *
 *
 *
+& ther 17 115: thee, their, the, there, therm, her, Thar, Thea, Thor, Thur, thew, they, ether, other, them, then, tier
 *
 *
 *
@@ -71,9 +81,7 @@
 *
 *
 *
-& phisycal 18 226: physical, fiscal, physically, PASCAL, Pascal, pascal, physicals, fiscally, Pharisaical, fiscals, miscall, musical, physic, physical's, Faisal, mescal, rascal, fiscal's
 *
-
 *
 *
 *
@@ -83,7 +91,6 @@
 *
 *
 *
-& prepearing 13 40: preparing, prepaying, preferring, peppering, repairing, reappearing, prospering, premiering, papering, prepping, pampering, pressuring, propelling
 *
 *
 *
@@ -93,7 +100,6 @@
 *
 *
 *
-& phisycal 18 96: physical, fiscal, physically, PASCAL, Pascal, pascal, physicals, fiscally, Pharisaical, fiscals, miscall, musical, physic, physical's, Faisal, mescal, rascal, fiscal's
 *
 *
 *
@@ -123,12 +129,11 @@
 *
 *
 *
-& knowldge 12 297: knowledge, knowledge's, Knowles, bowleg, Lodge, lodge, kludge, Noelle, Knowles's, knoll, nudge, kluge
 *
 *
-& trully 27 315: truly, trill, trolley, troll, drolly, telly, Tull, drill, drily, dryly, trial, trilby, trills, trimly, triply, cruelly, dully, rally, tally, tulle, Trudy, droll, trail, trawl, trolls, trill's, troll's
 *
 *
+& dificcult 7 485: difficult, difficulty, difficultly, default, difficulty's, difficulties, faculty
 *
 *
 *
@@ -144,7 +149,6 @@
 *
 *
 *
-& rescreate 17 422: res create, res-create, recreate, secrete, desecrate, redecorate, discrete, secret, regret, discreet, resurrect, recruiter, remigrate, resurgent, recruit, regrade, rescued
 *
 *
 *
@@ -154,40 +158,6 @@
 *
 *
 *
-*
-*
-*
-*
-*
-& physycal 9 519: physical, physically, physicals, physic, physical's, PASCAL, Pascal, pascal, fiscal
-*
-*
-*
-*
-*
-*
-*
-*
-*
-*
-*
-*
-*
-*
-*
-*
-*
-*
-*
-*
-*
-*
-*
-*
-*
-*
-*
-& needness 14 673: neediness, neediness's, needless, neatness, newness, redness, nakedness, lewdness, reediness, seediness, needles, nearness, needle's, neatness's
 *
 *
 *
@@ -203,13 +173,6 @@
 *
 *
 *
-& repeate 12 31: repeater, repeat, repeated, repute, repartee, repeats, repeaters, replete, repealed, repeat's, repent, repeater's
-*
-& educauional 6 49: educational, educationally, diagonal, additional, atonal, octagonal
-*
-*
-*
-& changings 6 79: changing, hangings, hanging's, changelings, changeling's, Chongqing's
 *
 *
 *
@@ -218,6 +181,11 @@
 *
 *
 *
+*
+*
+*
+*
+& goverment 9 98: government, movement, ferment, governed, garment, conferment, pavement, foment, deferment
 *
 *
 *
@@ -238,7 +206,74 @@
 *
 *
 *
-& democraty 9 247: Democrat, democrat, Democrats, democrats, democracy, Democrat's, Democratic, democrat's, democratic
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+& apperently 5 323: apparently, apparent, apprentice, opulently, parental
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+*
+
+*
+*
+*
+*
+*
+*
+*
+*
+*
+& commited 26 50: commit ed, commit-ed, committed, commuted, commutes, commute, commits, vomited, commit, commented, committee, committer, commuter, computed, communed, commode, commute's, combated, competed, commend, omitted, Comte, commodity, recommitted, coated, comity
+*
+*
 *
 *
 *
