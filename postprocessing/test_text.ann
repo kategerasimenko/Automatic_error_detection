@@ -10,19 +10,23 @@ T5	Spelling 1246 1256	apperently
 #5	AnnotatorNotes T5	apparently
 T6	Spelling 1515 1523	commited
 #6	AnnotatorNotes T6	committed
-T7	Articles 0 15	A vast majority
-#7	AnnotatorNotes T7	The vast majority
-T8	Articles 289 309	the significant role
-#8	AnnotatorNotes T8	a significant role
-T9	Articles 367 379	the children
-#9	AnnotatorNotes T9	children
-T10	Articles 597 606	the shops
-#10	AnnotatorNotes T10	shops
-T11	Articles 1044 1054	the course
-#11	AnnotatorNotes T11	course
-T12	Articles 1207 1215	long way
-#12	AnnotatorNotes T12	a long way
-T13	Articles 1543 1554	the problem
-#13	AnnotatorNotes T13	a problem
-T14	Articles 1598 1605	efforts
-#14	AnnotatorNotes T14	the efforts
+T7	Prepositions 0 15	A vast majority
+#7	AnnotatorNotes T7	In a vast majority
+T8	Prepositions 69 87	among young people
+#8	AnnotatorNotes T8	of young people
+T9	Prepositions 289 309	the significant role
+#9	AnnotatorNotes T9	for the significant role
+T10	Prepositions 647 666	trough the gap year
+#10	AnnotatorNotes T10	into trough the gap year
+T11	Prepositions 685 693	children
+#11	AnnotatorNotes T11	about children
+T12	Prepositions 1044 1054	the course
+#12	AnnotatorNotes T12	in the course
+T13	Prepositions 1055 1071	about discipline
+#13	AnnotatorNotes T13	of discipline
+T14	Prepositions 1111 1121	about laws
+#14	AnnotatorNotes T14	of laws
+T15	Prepositions 1154 1168	the percentage
+#15	AnnotatorNotes T15	in the percentage
+T16	Prepositions 1437 1445	that way
+#16	AnnotatorNotes T16	in that way

@@ -1,4 +1,4 @@
-from conllu import parse_tree, print_tree
+from .conllu import parse_tree, print_tree
 
 
 ##ID: Word index, integer starting at 1 for each new sentence; may be a range for multiword tokens; may be a decimal number for empty nodes.
@@ -12,18 +12,18 @@ from conllu import parse_tree, print_tree
 ##DEPS: Enhanced dependency graph in the form of a list of head-deprel pairs.
 ##MISC: Any other annotation.
 
+# target_pos is a func which returns bool from pos tag - whether it is the target tag
 
-
-def find_head_verb(node):
+def find_head_verb(node,target_pos):
     curr_ns = {}
     if node.data['xpostag'].startswith('V'):
         for child in node.children:
-            if child.data['xpostag'].startswith('N'):
+            if target_pos(child.data['xpostag']):
                 curr_ns[(child.data['id'],
                          child.data['form'])] = (node.data['lemma'].lower(),
                                                  node.data['xpostag'],
                                                  child.data['deprel'])
-    if node.data['xpostag'].startswith('N'):
+    if target_pos(node.data['xpostag']):
         for child in node.children:
             if child.data['deprel'] == 'cop':
                 curr_ns[(node.data['id'],
@@ -31,27 +31,32 @@ def find_head_verb(node):
                                                 child.data['xpostag'],
                                                 child.data['deprel'])
     for child in node.children:
-        curr_ns.update(find_head_verb(child))
+        curr_ns.update(find_head_verb(child,target_pos))
     return curr_ns
 
-def find_head(node):
+def find_head(node,target_pos):
     curr_ns = {}
     for child in node.children:
-        if child.data['xpostag'].startswith('N'):
-            curr_ns[(child.data['id'],
+        if target_pos(child.data['xpostag']):
+            curr_ns[(int(child.data['misc']['TokenRange'].split(':')[0]),
                      child.data['form'])] = (node.data['lemma'].lower(),
                                              node.data['xpostag'],
                                              child.data['deprel'])
-    if node.data['xpostag'].startswith('N'):
+    if target_pos(node.data['xpostag']):
         for child in node.children:
             if child.data['deprel'] == 'cop':
-                curr_ns[(node.data['id'],
+                curr_ns[(int(node.data['misc']['TokenRange'].split(':')[0]),
                          node.data['form'])] = (child.data['lemma'].lower(),
                                                 child.data['xpostag'],
                                                 child.data['deprel'])
     for child in node.children:
-        curr_ns.update(find_head(child))
+        curr_ns.update(find_head(child,target_pos))
     return curr_ns
-        
+
+if __name__ == '__main__':
+    with open('../BNC to plain text/BNC_B_10000_parsed.txt','r',encoding='utf-8') as f:
+        trees = parse_tree(f.read())
+    print(trees[5])
+    print(find_head(trees[5],lambda x: x.startswith('N')))
     
     

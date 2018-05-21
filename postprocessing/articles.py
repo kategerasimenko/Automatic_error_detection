@@ -37,16 +37,13 @@ class ArticleCorrector:
                        'Head_countability','NP_first_letter','Head_POS',
                        'hypernyms','higher_hypernyms',#'hhead','hhead_POS','deprel',
                        'prevprev','prev','post','postpost','prevprev_POS','prev_POS',
-                       'post_POS','postpost_POS','Article']
+                       'post_POS','postpost_POS','Target']
 
         with open('../models/article_logit_binary.pickle','rb') as f:
            self.logit_bin = pickle.load(f)
             
         with open('../models/article_logit_type.pickle','rb') as f:
            self.logit_type = pickle.load(f)
-
-        with open('../models/article_metaclassifier_xgboost.pickle','rb') as f:
-            self.metaforest = pickle.load(f)
 
         self.subst = re.compile('^[aA][nN]? |^[tT][hH][eE] ')
 
@@ -85,9 +82,9 @@ class ArticleCorrector:
            count_vect = pickle.load(f)
 
         all_vectors = lil_matrix((self.feats.shape[0],300))
-        for i,word in enumerate(self.feats['Head']):
-            if word in w2v_model:
-               all_vectors[i,:] = w2v_model[word]
+        #for i,word in enumerate(self.feats['Head']):
+        #    if word in w2v_model:
+        #       all_vectors[i,:] = w2v_model[word]
 
         npm = np_vect.transform(self.feats['NP'])
         pos = pos_vect.transform(self.feats['POS_tags'])
@@ -135,12 +132,31 @@ class ArticleCorrector:
                 corr_prob.append(probs[i+1])
         return init_prob,corr_prob
 
+    def normalize_article_corr(self,corr):
+        if corr == 'DELETE':
+            return 'zero'
+        toks = corr.split()
+        if toks[0].lower() in {'a','an','the'}:
+            return toks[0].lower()
+        else:
+            return 'zero'
 
+    def get_error_span(self,np,i,error_spans):
+        while i < len(error_spans) and \
+              error_spans[i][0] < np.Sent_start_idx + np.Start_idx - 1:
+            i += 1
+        if i < len(error_spans) and \
+           error_spans[i][0] > np.Sent_start_idx + np.Start_idx - 2 and \
+           error_spans[i][1] < np.Sent_start_idx + len(np.raw_NP) + np.Start_idx + 2:
+            return i+1, [np.raw_NP,np.Start_idx,np.Sent_start_idx,np.Target,np.Predicted,
+                         self.normalize_article_corr(error_spans[i][2])]
+        else:
+            return i,[np.raw_NP,np.Start_idx,np.Sent_start_idx,np.Target,np.Predicted,np.Target]
 
     def get_sentences_for_lm(self):
         sents = []
         for i,np,sent,start_idx,sent_idx,article,pred in \
-            self.feats[['raw_NP','Sentence','Start_idx','Sent_start_idx','Article','Predicted']].itertuples():
+            self.feats[['raw_NP','Sentence','Start_idx','Sent_start_idx','Target','Predicted']].itertuples():
             curr_sents = []
             for option in self.options:
                 new_pred = self.form_one_correction(np,option)
@@ -151,7 +167,7 @@ class ArticleCorrector:
             
 
     def write_sentences_for_lm(self,sents):
-        with open('test_sents.txt','w',encoding='utf-8') as f:
+        with open('test_sents_articles.txt','w',encoding='utf-8') as f:
             f.write('\n\n'.join(['\n'.join(x) for x in sents]))
             f.write('\n')
 
@@ -162,7 +178,7 @@ class ArticleCorrector:
         # probs = get_lm_probas(str_sents)
         # temp for local windows - file is processed by lm on server separately
         #self.write_sentences_for_lm(str_sents)
-        with open('lm_preds_test.json','r',encoding='utf-8') as f:
+        with open('lm_preds_test_articles.json','r',encoding='utf-8') as f:
             probs = json.loads(f.read())
         # end temp
         self.metafeats = pd.concat([pd.DataFrame(preds,columns=['present','zero']),
@@ -177,7 +193,7 @@ class ArticleCorrector:
         for i in range(self.metafeats.shape[0]):
             row = self.metafeats.iloc[i]
             feat_row = self.feats.iloc[i]
-            init_prob = row['lm_'+feat_row['Article']]
+            init_prob = row['lm_'+feat_row['Target']]
             corr_prob = row['lm_'+feat_row['Predicted']]
             init_probs.append(init_prob)
             corr_probs.append(corr_prob)
@@ -193,19 +209,21 @@ class ArticleCorrector:
         #                               self.metafeats['init_prob'],self.metafeats['corr_prob']):
         #    print(sent,np,iprob,cprob)
 
-        self.metafeats = self.metafeats.loc[(self.feats['Article'] != self.feats['Predicted']) |
-                                            (self.feats['Article'] != self.feats['LM']),:]
+        self.metafeats = self.metafeats.loc[(self.feats['Target'] != self.feats['Predicted']) |
+                                            (self.feats['Target'] != self.feats['LM']),:]
 
         with open('../models/article_choice_vectorizer.pickle','rb') as f:
             art_vect = pickle.load(f)
         self.metafeats_sparse = hstack((self.metafeats.drop(['lm_a','lm_an','lm_the','lm_zero'],axis=1).to_sparse(),
-                                 art_vect.transform(self.feats.loc[self.metafeats.index,'Article']),
+                                 art_vect.transform(self.feats.loc[self.metafeats.index,'Target']),
                                  art_vect.transform(self.feats.loc[self.metafeats.index,'LM']),
                                  art_vect.transform(self.feats.loc[self.metafeats.index,'Predicted'])))
         print(self.metafeats_sparse.shape)
 
 
     def get_preds(self):
+        with open('../models/article_metaclassifier_xgboost.pickle','rb') as f:
+            self.metaforest = pickle.load(f)
         preds = self.metaforest.predict_proba(self.metafeats_sparse)
         abs_preds = self.metaforest.predict(self.metafeats_sparse)
         final_preds = []
@@ -223,27 +241,25 @@ class ArticleCorrector:
         
         return preds
         
-    def form_one_correction(self,initial,predicted):
+    def form_one_correction(self,initial,predicted,idx):
         repl = predicted+' ' if predicted != 'zero' else ''
         if any([initial.lower().startswith(x) for x in ['a ','an ','the ']]):
             predicted = self.subst.sub(repl,initial)
         else:
-            if repl and initial[0] == initial[0].upper():
+            if repl and initial[0] == initial[0].upper() and idx == 0:
                 predicted = repl + initial[0].lower() + initial[1:]
             else:
                 predicted = repl + initial
-        if initial == initial.upper():
-            predicted = predicted.upper()
-        elif initial[0] == initial[0].upper():
+        if initial[0] == initial[0].upper() and idx == 0:
             predicted = predicted[0].upper() + predicted[1:]
         return predicted
 
     def form_corrections(self,preds):
-        to_correct = self.feats.loc[self.feats['Final_predicted'] != self.feats['Article'],:]
+        to_correct = self.feats.loc[self.feats['Final_predicted'] != self.feats['Target'],:]
         to_correct = to_correct[['Start_idx','Sent_start_idx','raw_NP','Final_predicted']].values.tolist()
         #print(to_correct)
         for i in range(len(to_correct)):
-            to_correct[i][3] = self.form_one_correction(to_correct[i][2],to_correct[i][3])
+            to_correct[i][3] = self.form_one_correction(to_correct[i][2],to_correct[i][3],to_correct[i][0])
         return to_correct
 
     def detect_errors(self,w2v_model,sents,tsents,idxs,raw_sents,sent_spans):

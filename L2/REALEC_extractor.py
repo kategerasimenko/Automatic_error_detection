@@ -8,7 +8,7 @@ class RealecExtractor:
         self.error = error_needed
         self.errors_to_correct = errors_to_correct
         self.path = path_to_corpus
-        self.path_new = './processed_texts/'
+        self.path_new = './processed_texts_'+error_needed.lower()+'/'
         self.current_doc_errors = OrderedDict()
         os.makedirs(self.path_new, exist_ok=True)
 

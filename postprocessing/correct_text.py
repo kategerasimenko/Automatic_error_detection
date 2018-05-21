@@ -10,6 +10,7 @@ from spellchecker import spellchecker, dummy_spellchecker, very_dummy_spellcheck
 from idx_linked_list import IdxList
 from gensim.models import KeyedVectors
 from articles import ArticleCorrector
+from prepositions import PrepositionCorrector
 import re
 
 
@@ -101,19 +102,27 @@ class AnnotationCompiler:
         print('Spelling')
         spell_anns = self.ann_from_spelling(spelling)
         self.anns.extend(spell_anns)
-        with open('corrected_spelling.txt','w',encoding='utf-8') as f:
+        print([self.text])
+        with open('corrected_spelling.txt','w',encoding='utf-8',newline='') as f:
             f.write(self.text)
         print('Tokenizing')
         sents,tokens,idxs,sent_spans = self.tokenize()
         print('Tagging')
         tsents = self.st.tag_sents(tokens)
-        print('Articles')
-        art_corrector = ArticleCorrector()
-        art_corrs = art_corrector.detect_errors(self.w2v_model,tokens,tsents,idxs,sents,sent_spans)
-        art_anns = self.ann_from_correction(art_corrs,'Articles')
-        with open('corrected_articles.txt','w',encoding='utf-8') as f:
+        print('Prepositions')
+        prep_corrector = PrepositionCorrector()
+        prep_corrs = prep_corrector.detect_errors(self.w2v_model,tokens,tsents,idxs,sents,sent_spans)
+        prep_anns = self.ann_from_correction(prep_corrs,'Prepositions')
+        with open('corrected_prepositions.txt','w',encoding='utf-8') as f:
             f.write(self.text)
-        self.anns.extend(art_anns)
+        self.anns.extend(prep_anns)
+        #print('Articles')
+        #art_corrector = ArticleCorrector()
+        #art_corrs = art_corrector.detect_errors(self.w2v_model,tokens,tsents,idxs,sents,sent_spans)
+        #art_anns = self.ann_from_correction(art_corrs,'Articles')
+        #with open('corrected_articles.txt','w',encoding='utf-8') as f:
+        #    f.write(self.text)
+        #self.anns.extend(art_anns)
         print('Writing annotation')
         self.write_annotation()
 
