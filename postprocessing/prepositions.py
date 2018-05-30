@@ -4,6 +4,7 @@ import numpy as np
 from scipy.sparse import hstack, csr_matrix, lil_matrix
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import minmax_scale
 from xgboost import XGBClassifier
 from nltk.tokenize import TreebankWordTokenizer
 from nltk import RegexpParser
@@ -14,20 +15,23 @@ import json
 
 import sys, os
 sys.path.insert(0, os.path.abspath('..'))
-from feature_extraction.preposition_extraction import create_preposition_rows
-from feature_extraction.lm_probas import get_lm_probas
-from preprocessing.conllu import parse_tree
+from preposition_table.preposition_extraction import create_preposition_rows
+from lm_probas import get_lm_probas
+from preposition_table.conllu import parse_tree
 
 
 class PrepositionCorrector:
     def __init__(self):
-        grammar = r'NP: {<IN>?<DT|JJ.?|PRP\$|POS|RB.|CD|NN.*>*<NN.*|PRP>}'
+        grammar = r'NP: {<IN|TO>?<DT|JJ.?|PRP\$|POS|RB.|CD|NN.*>*<NN.*|PRP>}'
         self.chunker = RegexpParser(grammar)
         self.tokenizer = TreebankWordTokenizer()
         with open('../prepositions.txt','r',encoding='utf-8-sig') as f:
             self.options = f.read().split('\n')
             self.options.append('zero')
             self.options_for_lookup = set(self.options[:-1])
+
+        with open('../all_prepositions.txt','r',encoding='utf-8') as f:
+            self.all_preps = set(f.read().split('\n'))
 
         self.cuvplus = defaultdict(list)
         with open('../cuvplus.txt','r',encoding='utf-8-sig') as f:
@@ -54,9 +58,7 @@ class PrepositionCorrector:
 
 
 
-    def get_table(self,sents,tsents,idxs,raw_sents,sent_spans):
-        with open('init_sents_for_prepositions_test_parsed.txt','r',encoding='utf-8') as f:
-            trees = parse_tree(f.read())
+    def get_table(self,sents,tsents,idxs,raw_sents,sent_spans,trees):
         for sent,tsent,spans,raw_sent,sent_span,tree in zip(sents,tsents,idxs,raw_sents,sent_spans,trees):
             if ' '.join(sent) == ' '.join(sent).upper():
                 sent = [x.lower() for x in sent if x]
@@ -65,6 +67,8 @@ class PrepositionCorrector:
             self.feats.extend(create_preposition_rows(sent,tsent,self.chunker,self.cuvplus,
                                                       tree,spans,raw_sent,sent_span[0]))
         self.feats = pd.DataFrame(self.feats,columns=self.cols)
+        self.feats['HHead'].replace('', np.nan, inplace=True)
+        self.feats.dropna(subset=['HHead'],inplace=True)
         
 
     def get_feature_matrix(self,w2v_model):
@@ -91,17 +95,7 @@ class PrepositionCorrector:
             
         with open('../models/deprel_vectorizer.pickle','rb') as f:
             deprel_vect = pickle.load(f)
-            
-
-        all_vectors = lil_matrix((self.feats.shape[0],300))
-        for i,word in enumerate(self.feats['Head']):
-            if word in w2v_model:
-               all_vectors[i,:] = w2v_model[word]
- 
-        all_vectors_hhead = lil_matrix((self.feats.shape[0],300))
-        for i,word in enumerate(self.feats['Head']):
-            if word in w2v_model:
-               all_vectors_hhead[i,:] = w2v_model[word]
+        
 
         npm = np_vect.transform(self.feats['NP'])
 
@@ -123,9 +117,12 @@ class PrepositionCorrector:
         prevs = hstack([onewordvect.transform(self.feats['prev_'+str(i)]) for i in range(1,6)])
         posts = hstack([onewordvect.transform(self.feats['post_'+str(i)]) for i in range(1,6)])
 
-        self.data_sparse = hstack((npm,pos,head,countability,head_pos,hyp,hhyp,all_vectors,
-                                   hhead,hhead_pos,deprel,all_vectors_hhead,
+        self.data_sparse = hstack((npm,pos,head,countability,head_pos,hyp,hhyp,
+                                   hhead,hhead_pos,deprel,
                                    prevs,prevs_pos,posts,posts_pos)).tocsr()
+        with open('../models/preposition_nonzero_columns.pickle','rb') as f:
+            nonzero_columns = pickle.load(f)
+        self.data_sparse = self.data_sparse[:,nonzero_columns]
 
 
     def get_probas(self):
@@ -136,6 +133,9 @@ class PrepositionCorrector:
 
     def get_first_preds(self):
         preds = self.logit_bin.predict(self.data_sparse)
+        if not self.data_sparse[preds == 'present'].shape[0]:
+            self.feats['Predicted'] = preds
+            return preds
         preds_type = self.logit_type.predict(self.data_sparse[preds == 'present'])
         preds[preds == 'present'] = preds_type
         self.feats['Predicted'] = preds
@@ -144,27 +144,35 @@ class PrepositionCorrector:
 
     def normalize_preposition_corr(self,corr,position):
         # position - before, NP, over
-        #print(corr,position)
         if corr == 'DELETE':
             return 'zero'
         toks = corr.split()
         if position == 'NP':
             if toks[0].lower() in self.options_for_lookup:
                 return toks[0].lower()
+            elif toks[0].lower() in self.all_preps:
+                return None
             else:
                 return 'zero'
         elif position == 'before':
             if toks[-1].lower() in self.options_for_lookup:
                 return toks[-1].lower()
+            elif toks[-1].lower() in self.all_preps:
+                return None
             else:
                 return 'zero'
         else:
             toks_in_preps = [i for i,x in enumerate(toks) 
                              if x.lower() in self.options_for_lookup]
+            toks_in_all_preps = [i for i,x in enumerate(toks) 
+                             if x.lower() in self.all_preps]
             if len(toks_in_preps) > 1:
                 return None
             elif not toks_in_preps:
-                return 'zero'
+                if toks_in_all_preps:
+                    return None
+                else:
+                    return 'zero'
             else:
                 return toks[toks_in_preps[0]].lower()
 
@@ -188,12 +196,13 @@ class PrepositionCorrector:
                                        or error_spans[i][0] == np.Sent_start_idx + np.Start_idx):
             if error_spans[i][0] == np.Sent_start_idx + np.Start_idx:
                 return i+1, [np.raw_NP,np.Start_idx,np.Sent_start_idx,np.Target,np.Predicted,
-                             self.normalize_preposition_corr(error_spans[i][2],'np')]
-            else:
+                             self.normalize_preposition_corr(error_spans[i][2],'NP')]
+            elif error_spans[i][0] < np.Sent_start_idx + np.Start_idx:
                 corr = self.normalize_preposition_corr(error_spans[i][2],'over')
-                if corr is None:
-                    corr = np.Target
                 return i+1, [np.raw_NP,np.Start_idx,np.Sent_start_idx,np.Target,np.Predicted,corr]
+            else:
+                return i+1,[np.raw_NP,np.Start_idx,np.Sent_start_idx,np.Target,np.Predicted,np.Target]
+                
         else:
             return i,[np.raw_NP,np.Start_idx,np.Sent_start_idx,np.Target,np.Predicted,np.Target]
 
@@ -220,11 +229,11 @@ class PrepositionCorrector:
     def get_metamatrix(self):
         preds, preds_type = self.get_probas()
         str_sents = self.get_sentences_for_lm()
-        # probs = get_lm_probas(str_sents)
+        probs = get_lm_probas(str_sents)
         # temp for local windows - file is processed by lm on server separately
         #self.write_sentences_for_lm(str_sents)
-        with open('lm_preds_test_prepositions.json','r',encoding='utf-8') as f:
-            probs = json.loads(f.read())
+        #with open('lm_preds_test_prepositions.json','r',encoding='utf-8') as f:
+        #    probs = json.loads(f.read())
         # end temp
         self.metafeats = pd.concat([pd.DataFrame(preds,columns=['present','zero']),
                                     pd.DataFrame(preds_type,columns=self.logit_type.classes_),
@@ -235,6 +244,10 @@ class PrepositionCorrector:
         init_probs = []
         corr_probs = []
         lm_choice = []
+        print(self.metafeats.shape[0],self.feats.shape[0])
+        print(pd.DataFrame(preds,columns=['present','zero']).shape,
+                                    pd.DataFrame(preds_type,columns=self.logit_type.classes_).shape,
+                                    pd.DataFrame(probs,columns=['lm_'+x for x in self.options]).shape)
         for i in range(self.metafeats.shape[0]):
             row = self.metafeats.iloc[i]
             feat_row = self.feats.iloc[i]
@@ -259,7 +272,7 @@ class PrepositionCorrector:
 
         with open('../models/preposition_choice_vectorizer.pickle','rb') as f:
             art_vect = pickle.load(f)
-        self.metafeats_sparse = hstack((self.metafeats.drop(['lm_'+x for x in self.options],axis=1).to_sparse(),
+        self.metafeats_sparse = hstack((self.metafeats.to_sparse(),
                                  art_vect.transform(self.feats.loc[self.metafeats.index,'Target']),
                                  art_vect.transform(self.feats.loc[self.metafeats.index,'LM']),
                                  art_vect.transform(self.feats.loc[self.metafeats.index,'Predicted'])))
@@ -267,22 +280,26 @@ class PrepositionCorrector:
 
 
     def get_preds(self):
-        with open('../models/preposition_metaclassifier_xgboost.pickle','rb') as f:
+        with open('../models/preposition_metaclassifier_logit.pickle','rb') as f:
             self.metaforest = pickle.load(f)
         preds = self.metaforest.predict_proba(self.metafeats_sparse)
         abs_preds = self.metaforest.predict(self.metafeats_sparse)
         final_preds = []
-        preds = pd.DataFrame(preds,columns=self.metaforest.classes_)
-        option_interj = sorted(list(set(self.logit_type.classes_) & set(self.metaforest.classes_)))
-        for l1_prob,lm_prob,meta_prob in zip(self.metafeats[option_interj+['present']].values,
-                                             self.metafeats[['lm_'+x for x in option_interj]].values,
-                                             preds[option_interj].values):            
+        probs = []
+        for l1_prob,lm_prob,meta_prob in zip(self.metafeats[self.options+['present']].values,
+                                             self.metafeats[['lm_'+x for x in self.options]].values,
+                                             preds):            
             #print(l1_prob,meta_prob,np.mean((l1_prob,meta_prob),axis=0))
             l1_prob[:-2] *= l1_prob[-1]
-            final_preds.append(option_interj[np.argmax(np.average((l1_prob[:-1],meta_prob,lm_prob),
-                                                       weights=(0.25,0.5,0.25),axis=0))])            
+            lm_prob /= sum(lm_prob)
+            final_preds.append(self.options[np.argmax(np.average((l1_prob[:-1],meta_prob,lm_prob),
+                                                       weights=[0.25,0.5,0.25],axis=0))])
+            probs.append(np.max(np.average((l1_prob[:-1],meta_prob,lm_prob),
+                                                       weights=[0.25,0.5,0.25],axis=0)))
         self.feats['Final_predicted'] = self.feats['Predicted']
-        self.feats.loc[self.metafeats.index,'Final_predicted'] = final_preds
+        self.feats['probs'] = 0
+        self.feats.loc[self.metafeats.index,'Final_predicted'] = abs_preds
+        self.feats.loc[self.metafeats.index,'probs'] = probs
         self.feats.to_csv('test_feats_preps.csv',sep=';',encoding='utf-8-sig')
         
         return preds
@@ -306,18 +323,27 @@ class PrepositionCorrector:
 
     def form_corrections(self,preds):
         to_correct = self.feats.loc[self.feats['Final_predicted'] != self.feats['Target'],:]
-        to_correct = to_correct[['Start_idx','Sent_start_idx','raw_NP','Final_predicted']].values.tolist()
+        to_correct = to_correct[['Start_idx','Sent_start_idx','raw_NP','Final_predicted','Target']].values.tolist()
+        idxs = []
         #print(to_correct)
         for i in range(len(to_correct)):
+            initial = to_correct[i][4] if to_correct[i][4] != 'zero' else ''
+            corrected = to_correct[i][3] if to_correct[i][3] != 'zero' else ''
+            offset = len(initial) - len(corrected)
+            new_idx = to_correct[i][0] + to_correct[i][1] + len(corrected)
             to_correct[i][3] = self.form_one_correction(to_correct[i][2],to_correct[i][3],to_correct[i][0])
-        return to_correct
+            to_correct[i].pop()
+            idxs.append((new_idx, offset))
+        return to_correct,idxs
 
     def detect_errors(self,w2v_model,sents,tsents,idxs,raw_sents,sent_spans):
         self.sents = sents
         self.tsents = tsents
         self.idx_to_sent = {idx[0]:sent for idx,sent in zip(sent_spans,sents)}
         print('\tGetting table')
-        self.get_table(sents,tsents,idxs,raw_sents,sent_spans)
+        with open('init_sents_for_prepositions_test_parsed.txt','r',encoding='utf-8') as f:
+            trees = parse_tree(f.read())
+        self.get_table(sents,tsents,idxs,raw_sents,sent_spans,trees)
         print('\tGetting feature matrix')
         self.get_feature_matrix(w2v_model)
         print('\tGetting first preds')
@@ -327,8 +353,8 @@ class PrepositionCorrector:
         print('\tGetting final preds')
         preds = self.get_preds()
         print('\tForming corrections')
-        corrs = self.form_corrections(preds)
-        return corrs
+        corrs,idxs = self.form_corrections(preds)
+        return corrs,idxs
         
 
 

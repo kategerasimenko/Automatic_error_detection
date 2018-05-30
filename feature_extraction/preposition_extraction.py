@@ -19,7 +19,7 @@ with open('../prepositions.txt','r',encoding='utf-8-sig') as f:
 class PrepositionObject:
     def __init__(self,np,cuvplus,prevs,posts,heads,idx=None,
                  head_start_idx=None,sep=';',sent_start=None):
-        if np[0][1] == 'IN':
+        if np[0][1] == 'IN' or np[0][1] == 'TO':
             self.target = np[0][0].lower()
             np = np[1:]
         else:
@@ -106,7 +106,10 @@ def create_preposition_rows(sent,tsent,chunker,cuvplus,tree,spans=None,raw_sent=
             end_idxs[tsent[i][0]].put(spans[i][1])
         prevs[full_sent[i+5][0]].put(full_sent[i:i+5])
         posts[full_sent[i+5][0]].put(full_sent[i+6:i+11])
-    chunks = chunker.parse(tsent)
+    try:
+        chunks = chunker.parse(tsent)
+    except ValueError:
+        return None
     for subtree in chunks.subtrees():
         if subtree.label() == 'NP':
             subtree = list(subtree)

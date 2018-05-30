@@ -4,18 +4,14 @@ import numpy as np
 from scipy.sparse import hstack, csr_matrix, lil_matrix
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.linear_model import LogisticRegression
-from xgboost import XGBClassifier
+#from xgboost import XGBClassifier
 from nltk.tokenize import TreebankWordTokenizer
 from nltk import RegexpParser
 from collections import defaultdict
 import re
 import json
-
-
-import sys, os
-sys.path.insert(0, os.path.abspath('..'))
-from feature_extraction.article_extraction import create_article_rows
-from feature_extraction.lm_probas import get_lm_probas
+from article_extraction import create_article_rows
+from lm_probas import get_lm_probas
 
 
 class ArticleCorrector:
@@ -36,8 +32,9 @@ class ArticleCorrector:
         self.cols = ['Sentence','raw_NP','NP','Start_idx','Sent_start_idx','POS_tags','Head',
                        'Head_countability','NP_first_letter','Head_POS',
                        'hypernyms','higher_hypernyms',#'hhead','hhead_POS','deprel',
-                       'prevprev','prev','post','postpost','prevprev_POS','prev_POS',
-                       'post_POS','postpost_POS','Target']
+                       'prev_2','prev_1','prev_2_POS','prev_1_POS',
+                       'post_1','post_2','post_1_POS','post_2_POS',
+                       'Target']
 
         with open('../models/article_logit_binary.pickle','rb') as f:
            self.logit_bin = pickle.load(f)
@@ -55,11 +52,11 @@ class ArticleCorrector:
             else:
                 sent = [x for x in sent if x]
             self.feats.extend(create_article_rows(sent,tsent,self.chunker,self.cuvplus,
-                                                  spans,raw_sent,sent_span[0]))
+                                                  None,spans,raw_sent,sent_span[0]))
         self.feats = pd.DataFrame(self.feats,columns=self.cols)
         
 
-    def get_feature_matrix(self,w2v_model):
+    def get_feature_matrix(self):
         with open('../models/one_word_vectorizer.pickle','rb') as f:
            onewordvect = pickle.load(f)
 
@@ -81,31 +78,25 @@ class ArticleCorrector:
         with open('../models/countability_vectorizer.pickle','rb') as f:
            count_vect = pickle.load(f)
 
-        all_vectors = lil_matrix((self.feats.shape[0],300))
-        #for i,word in enumerate(self.feats['Head']):
-        #    if word in w2v_model:
-        #       all_vectors[i,:] = w2v_model[word]
-
         npm = np_vect.transform(self.feats['NP'])
         pos = pos_vect.transform(self.feats['POS_tags'])
         head_pos = pos_vect.transform(self.feats['Head_POS'])
-        prevprev_pos = pos_vect.transform(self.feats['prevprev_POS'])
-        prev_pos = pos_vect.transform(self.feats['prev_POS'])
-        post_pos = pos_vect.transform(self.feats['post_POS'])
-        postpost_pos = pos_vect.transform(self.feats['postpost_POS'])
+        prevs_pos = hstack([pos_vect.transform(self.feats['prev_'+str(i)+'_POS']) for i in range(1,3)])
+        posts_pos = hstack([pos_vect.transform(self.feats['post_'+str(i)+'_POS']) for i in range(1,3)])
         countability = count_vect.transform(self.feats['Head_countability'])
         first_letter = letter_vect.transform(self.feats['NP_first_letter'])
         hyp = hyp_vect.transform(self.feats['hypernyms'])
         hhyp = hhyp_vect.transform(self.feats['higher_hypernyms'])
         head = onewordvect.transform(self.feats['Head'])
-        prevprev = onewordvect.transform(self.feats['prevprev'])
-        prev = onewordvect.transform(self.feats['prev'])
-        post = onewordvect.transform(self.feats['post'])
-        postpost = onewordvect.transform(self.feats['postpost'])
+        prevs = hstack([onewordvect.transform(self.feats['prev_'+str(i)]) for i in range(1,3)])
+        posts = hstack([onewordvect.transform(self.feats['post_'+str(i)]) for i in range(1,3)])
 
         self.data_sparse = hstack((npm,pos,head,countability,first_letter,head_pos,
-                              hyp,hhyp,all_vectors,prevprev,prev,post,postpost,
-                              prevprev_pos,prev_pos,post_pos,postpost_pos)).tocsr()
+                              hyp,hhyp,prevs,posts,prevs_pos,posts_pos)).tocsr()
+
+        with open('../models/nonzero_columns.pickle','rb') as f:
+            nonzero_columns = pickle.load(f)
+        self.data_sparse = self.data_sparse[:,nonzero_columns]
 
 
     def get_probas(self):
@@ -116,6 +107,9 @@ class ArticleCorrector:
 
     def get_first_preds(self):
         preds = self.logit_bin.predict(self.data_sparse)
+        if not self.data_sparse[preds == 'present'].shape[0]:
+            self.feats['Predicted'] = preds
+            return preds
         preds_type = self.logit_type.predict(self.data_sparse[preds == 'present'])
         preds[preds == 'present'] = preds_type
         self.feats['Predicted'] = preds
@@ -159,7 +153,7 @@ class ArticleCorrector:
             self.feats[['raw_NP','Sentence','Start_idx','Sent_start_idx','Target','Predicted']].itertuples():
             curr_sents = []
             for option in self.options:
-                new_pred = self.form_one_correction(np,option)
+                new_pred = self.form_one_correction(np,option,start_idx)
                 new_sent = sent[:start_idx]+new_pred+sent[start_idx+len(np):]
                 curr_sents.append(' '.join(self.tokenizer.tokenize(new_sent)))
             sents.append(curr_sents)
@@ -175,11 +169,11 @@ class ArticleCorrector:
     def get_metamatrix(self):
         preds, preds_type = self.get_probas()
         str_sents = self.get_sentences_for_lm()
-        # probs = get_lm_probas(str_sents)
+        probs = get_lm_probas(str_sents)
         # temp for local windows - file is processed by lm on server separately
         #self.write_sentences_for_lm(str_sents)
-        with open('lm_preds_test_articles.json','r',encoding='utf-8') as f:
-            probs = json.loads(f.read())
+        #with open('lm_preds_test_articles.json','r',encoding='utf-8') as f:
+        #    probs = json.loads(f.read())
         # end temp
         self.metafeats = pd.concat([pd.DataFrame(preds,columns=['present','zero']),
                                     pd.DataFrame(preds_type,columns=['a','an','the']),
@@ -214,7 +208,7 @@ class ArticleCorrector:
 
         with open('../models/article_choice_vectorizer.pickle','rb') as f:
             art_vect = pickle.load(f)
-        self.metafeats_sparse = hstack((self.metafeats.drop(['lm_a','lm_an','lm_the','lm_zero'],axis=1).to_sparse(),
+        self.metafeats_sparse = hstack((self.metafeats.to_sparse(),
                                  art_vect.transform(self.feats.loc[self.metafeats.index,'Target']),
                                  art_vect.transform(self.feats.loc[self.metafeats.index,'LM']),
                                  art_vect.transform(self.feats.loc[self.metafeats.index,'Predicted'])))
@@ -233,6 +227,7 @@ class ArticleCorrector:
                                              preds):
             #print(l1_prob,meta_prob,np.mean((l1_prob,meta_prob),axis=0))
             l1_prob[:3] *= l1_prob[-1]
+            lm_prob /= sum(lm_prob)
             final_preds.append(self.options[np.argmax(np.average((l1_prob[:-1],meta_prob,lm_prob),
                                                        axis=0))])
         self.feats['Final_predicted'] = self.feats['Predicted']
@@ -256,11 +251,19 @@ class ArticleCorrector:
 
     def form_corrections(self,preds):
         to_correct = self.feats.loc[self.feats['Final_predicted'] != self.feats['Target'],:]
-        to_correct = to_correct[['Start_idx','Sent_start_idx','raw_NP','Final_predicted']].values.tolist()
+        to_correct = to_correct[['Start_idx','Sent_start_idx','raw_NP','Final_predicted','Target']].values.tolist()
+        idxs = []
         #print(to_correct)
         for i in range(len(to_correct)):
+            initial = to_correct[i][4] if to_correct[i][4] != 'zero' else ''
+            corrected = to_correct[i][3] if to_correct[i][3] != 'zero' else ''
+            offset = len(initial) - len(corrected)
+            new_idx = to_correct[i][0] + to_correct[i][1] + len(corrected)
             to_correct[i][3] = self.form_one_correction(to_correct[i][2],to_correct[i][3],to_correct[i][0])
-        return to_correct
+            to_correct[i].pop()
+            idxs.append((new_idx, offset))
+            print(to_correct[i],idxs[-1])
+        return to_correct,idxs
 
     def detect_errors(self,w2v_model,sents,tsents,idxs,raw_sents,sent_spans):
         self.sents = sents
@@ -277,8 +280,8 @@ class ArticleCorrector:
         print('\tGetting final preds')
         preds = self.get_preds()
         print('\tForming corrections')
-        corrs = self.form_corrections(preds)
-        return corrs
+        corrs,idxs = self.form_corrections(preds)
+        return corrs,idxs
         
 
 

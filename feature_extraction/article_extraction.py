@@ -11,7 +11,7 @@ punct = set(punctuation) | {'‘','’','—',' ','\t','\n'}
 punct_str = ''.join(punct)
 
 class ArticleObject:
-    def __init__(self,np,cuvplus,prevprev,prev,post,postpost,idx=None,sep=';'):
+    def __init__(self,np,cuvplus,prevs,posts,idx=None,sep=';'):
         if np[0][0].lower() in {'a','an','the'}:
             self.target = np[0][0].lower()
             np = np[1:]
@@ -31,14 +31,10 @@ class ArticleObject:
         except:
             self.hypernyms = ''
             self.higher_hypernyms = ''
-        self.prevprev = prevprev[0].lower()
-        self.prev = prev[0].lower()
-        self.post = post[0].lower()
-        self.postpost = postpost[0].lower()
-        self.prevprev_pos = prevprev[1]
-        self.prev_pos = prev[1]
-        self.post_pos = post[1]
-        self.postpost_pos = postpost[1]
+        self.prevs = [x[0].lower() for x in prevs]
+        self.prevs_pos = [x[1] for x in prevs]
+        self.posts = [x[0].lower() for x in posts]
+        self.posts_pos = [x[1] for x in posts]
         self.sep = sep
         self.start_idx = idx
         #k = (idxs[np[-1][0]].get()+1,np[-1][0])
@@ -79,22 +75,29 @@ def maintain_queues(subtree,prevs,posts,start_idxs,end_idxs,spans):
                     end_idxs[subw[0]].put(end_idxs[subw[0]].get())
     return prevs,posts,start_idxs,end_idxs
 
-def create_article_rows(sent,tsent,chunker,cuvplus,spans=None,raw_sent=None,sent_start=None):
+def create_article_rows(sent,tsent,chunker,cuvplus,tree,spans=None,raw_sent=None,sent_start=None):
     if raw_sent is None:
         raw_sent = ' '.join(sent)
     #print(raw_sent[:20])
-    full_sent = [('',''),('','')] + tsent + [('',''),('','')]
+    full_sent = [('','')]*2 + tsent + [('','')]*2
     prevs = defaultdict(Queue)
     posts = defaultdict(Queue)
     start_idxs = defaultdict(Queue)
     end_idxs = defaultdict(Queue)
+    if len(sent) != len(tsent):
+        print(sent,tsent,sent_start)
+        return None
     for i in range(len(sent)):
         if spans is not None and tsent[i][0]:
             start_idxs[tsent[i][0]].put(spans[i][0])
             end_idxs[tsent[i][0]].put(spans[i][1])
-        prevs[full_sent[i+2][0]].put((full_sent[i],full_sent[i+1]))
-        posts[full_sent[i+2][0]].put((full_sent[i+3],full_sent[i+4]))
-    chunks = chunker.parse(tsent)
+        prevs[full_sent[i+2][0]].put(full_sent[i:i+2])
+        posts[full_sent[i+2][0]].put(full_sent[i+3:i+5])
+    try:
+        chunks = chunker.parse(tsent)
+    except ValueError:
+        print('sent not parsed',tsent)
+        return None
     for subtree in chunks.subtrees():
         if subtree.label() == 'NP':
             subtree = list(subtree)
@@ -114,8 +117,8 @@ def create_article_rows(sent,tsent,chunker,cuvplus,spans=None,raw_sent=None,sent
                 subtree.pop(0)
             if subtree and subtree[-1][1].startswith('NN'):
                 try:
-                    prevprev,prev = prevs[subtree[0][0]].get()
-                    post,postpost = posts[subtree[-1][0]].get()
+                    curr_prevs = prevs[subtree[0][0]].get()
+                    curr_posts = posts[subtree[-1][0]].get()
                     for w in subtree[1:]:
                         prevs[w[0]].get()
                     for w in subtree[:-1]:
@@ -131,17 +134,16 @@ def create_article_rows(sent,tsent,chunker,cuvplus,spans=None,raw_sent=None,sent
                     else:
                         start_idx,end_idx = None,None
                         init_words = ' '.join([x[0] for x in subtree])
-                    obj = ArticleObject(subtree,cuvplus,prevprev,prev,post,postpost,start_idx)
+                    obj = ArticleObject(subtree,cuvplus,curr_prevs,curr_posts,start_idx)
                     yield [raw_sent,init_words,obj.words,obj.start_idx,sent_start,
                            obj.tags,obj.head,obj.countability,obj.first,
-                           obj.head_pos,obj.hypernyms,obj.higher_hypernyms,
-                           #obj.hhead,obj.hhead_pos,obj.deprel,
-                           obj.prevprev,obj.prev,
-                           obj.post,obj.postpost,obj.prevprev_pos,obj.prev_pos,
-                           obj.post_pos,obj.postpost_pos,obj.target]
+                           obj.head_pos,obj.hypernyms,obj.higher_hypernyms] + \
+                           obj.prevs + obj.prevs_pos + obj.posts + obj.posts_pos + \
+                           [obj.target]
                 except:
-                    traceback.print_exc()
-                    print('smth wrong:',chunks,'\n',subtree)
+                    pass
+                    #traceback.print_exc()
+                    #print('smth wrong:',chunks,'\n',subtree)
             else:
                 prevs,posts,start_idxs,end_idxs = maintain_queues(subtree,prevs,posts,start_idxs,end_idxs,spans)
         else:

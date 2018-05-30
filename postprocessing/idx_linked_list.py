@@ -14,10 +14,14 @@ class IdxList:
             self.root = node_to_add
         else:
             node = self.root
+            prev_node = None
             while node is not None and node.idx < idx+offset: # ищем по старому индексу
                 prev_node = node
                 node = node.next
-            prev_node.next = node_to_add
+            if prev_node is not None:
+                prev_node.next = node_to_add
+            else:
+                self.root = node_to_add
             node_to_add.next = node
             while node is not None:
                 node.idx -= offset
