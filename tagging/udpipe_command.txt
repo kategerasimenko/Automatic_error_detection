@@ -1,0 +1,5 @@
+for BNC:
+udpipe/src/udpipe --tokenizer='ranges;presegmented' --tag --parse --outfile=BNC_B_10000_parsed.txt english-ud-2.0-170801.udpipe BNC_B_10000.txt
+
+for REALEC:
+udpipe/src/udpipe --tokenizer=ranges --tag --parse --outfile=init_sents_for_prepositions_parsed.txt english-ud-2.0-170801.udpipe init_sents_for_prepositions.txt
