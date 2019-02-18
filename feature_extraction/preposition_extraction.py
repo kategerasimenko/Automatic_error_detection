@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.abspath('..'))
 from preprocessing.get_corpus_to_trees import find_head
 
 import traceback
+from pprint import pprint
 
 punct = set(punctuation) | {'‘','’','—',' ','\t','\n'}
 punct_str = ''.join(punct)
@@ -52,7 +53,8 @@ class PrepositionObject:
         else:
             full_idx = None
         k = (full_idx,np[-1][0])
-        #print(heads,k,sent_start)
+        #pprint(heads)
+        #print(k,head_start_idx, sent_start)
         if k in heads:
             self.hhead,self.hhead_pos,self.deprel = heads[k]
         else:
@@ -92,14 +94,15 @@ def maintain_queues(subtree,prevs,posts,start_idxs,end_idxs,spans):
 def create_preposition_rows(sent,tsent,chunker,cuvplus,tree,spans=None,raw_sent=None,sent_start=None):
     if raw_sent is None:
         raw_sent = ' '.join(sent)
-    #print(sent,spans,sent_start)
+    #print(sent_start)
+    #pprint(list(zip(sent, spans)))
     full_sent = [('','')]*5 + tsent + [('','')]*5
     prevs = defaultdict(Queue)
     posts = defaultdict(Queue)
     start_idxs = defaultdict(Queue)
     end_idxs = defaultdict(Queue)
     heads = find_head(tree,lambda x: x.startswith('N') or x == 'PRP')
-    #print(heads)
+    #pprint(heads)
     for i in range(len(sent)):
         if spans is not None and tsent[i][0]:
             start_idxs[tsent[i][0]].put(spans[i][0])

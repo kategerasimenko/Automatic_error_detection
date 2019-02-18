@@ -4,7 +4,10 @@ import csv
 import re
 from time import time
 from collections import defaultdict
-from preposition_extraction import create_preposition_rows
+import sys
+import os
+sys.path.insert(0, os.path.abspath('..'))
+from feature_extraction.preposition_extraction import create_preposition_rows
 from conllu import parse_tree
 
 
@@ -30,11 +33,13 @@ def parsed_sent_generator(path):
                 sent += line
                 cells = line.split('\t')
                 tokens.append(cells[1])
-                token_spans.append((last_idx,last_idx+len(cells[1])))
-                tagged_tokens.append((cells[1],cells[4]))
-                last_idx += len(cells[1])+1
+                raw_span = cells[-1].split('|')[-1].split('=')[1].split(':')
                 if not sent_start:
-                    sent_start = int(cells[-1].split('|')[-1].split('=')[1].split(':')[0])
+                    sent_start = int(raw_span[0])
+                span = [int(x)-sent_start for x in raw_span]
+                token_spans.append(tuple(span))
+                tagged_tokens.append((cells[1],cells[4]))
+                last_idx += span[1]
         yield sent,tokens,tagged_tokens,token_spans,\
               (sent_start,sent_start+last_idx)
 
@@ -67,7 +72,7 @@ error = errors[error_name]
 
 
 cuvplus = defaultdict(list)
-with open('../cuvplus.txt','r',encoding='utf-8-sig') as f:
+with open('cuvplus.txt','r',encoding='utf-8-sig') as f:
     for line in f.readlines():
         entry = line.strip().split('|')
         cuvplus[entry[0]].append(entry[1:])
@@ -81,38 +86,44 @@ with open('../cuvplus.txt','r',encoding='utf-8-sig') as f:
     
 lim = 100
 print(lim)
-start = 6000000
+start = 0
 step = 100000
 last_idx = -1
 border_sent = True
 curr_trees = []
 rows = []
+open(error['csv'],'w',newline='',encoding='utf-8-sig').close()
 
-for j,conllu_info in enumerate(parsed_sent_generator('../parse_BNC_udpipe/BNC_parsed.txt')):
-    #if j > lim:
-    #    break
-    if j < start:
+for j,conllu_info in enumerate(parsed_sent_generator('../feature_extraction/test_parsed.txt')):
+    try:
+        if j > lim:
+            break
+        if j < start:
+            continue
+        if not j % step and j != start:
+            print(j)
+            a = open(error['csv'],'a',newline='',encoding='utf-8-sig')
+            aw = csv.writer(a,delimiter=';',quoting=csv.QUOTE_MINIMAL)
+            aw.writerows(rows)
+            rows = []
+            a.close()
+        tree,sent,tsent,token_spans,sent_span = conllu_info
+        if tree.strip():
+            tree = parse_tree(tree)[0]
+            if ' '.join(sent) == ' '.join(sent).upper():
+                sent = [x.lower() for x in sent if x]
+            else:
+                sent = [x for x in sent if x]
+            if sent:
+                row_gen = error['extractor'](sent,tsent,error['chunker'],cuvplus,
+                                             tree,token_spans,sent_start=sent_span[0])
+                if row_gen is not None:
+                    for row in row_gen:
+                        rows.append(row)
+    except:
+        print('Error has occured at line', j)
+        traceback.print_exc()
         continue
-    if not j % step and j != start:
-        print(j)
-        a = open(error['csv'],'a',newline='',encoding='utf-8-sig')
-        aw = csv.writer(a,delimiter=';',quoting=csv.QUOTE_MINIMAL)
-        aw.writerows(rows)
-        rows = []
-        a.close()
-    tree,sent,tsent,token_spans,sent_span = conllu_info
-    if tree.strip():
-        tree = parse_tree(tree)[0]
-        if ' '.join(sent) == ' '.join(sent).upper():
-            sent = [x.lower() for x in sent if x]
-        else:
-            sent = [x for x in sent if x]
-        if sent:
-            row_gen = error['extractor'](sent,tsent,error['chunker'],cuvplus,
-                                         tree,token_spans,sent_start=sent_span[0])
-            if row_gen is not None:
-                for row in row_gen:
-                    rows.append(row)
 
 a = open(error['csv'],'a',newline='',encoding='utf-8-sig')
 aw = csv.writer(a,delimiter=';',quoting=csv.QUOTE_MINIMAL)
